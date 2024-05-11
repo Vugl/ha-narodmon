@@ -1,4 +1,4 @@
-#  Copyright (c) 2021-2022, Andrey "Limych" Khrolenok <andrey@khrolenok.ru>
+#  Copyright (c) 2021-2024, Andrey "Limych" Khrolenok <andrey@khrolenok.ru>
 #  Creative Commons BY-NC-SA 4.0 International Public License
 #  (see LICENSE.md or https://creativecommons.org/licenses/by-nc-sa/4.0/)
 """The NarodMon Cloud Integration Component.
@@ -12,7 +12,7 @@ import logging
 import os
 import re
 import time
-from typing import Any, Dict, List
+from typing import Any
 
 import voluptuous as vol
 
@@ -150,7 +150,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
             hass.data[DOMAIN].setdefault(entry.entry_id, {})
             hass.data[DOMAIN][entry.entry_id][index] = coordinator
 
-        hass.async_add_job(hass.config_entries.async_forward_entry_setup(entry, SENSOR))
+        await hass.async_create_task(
+            hass.config_entries.async_forward_entry_setup(entry, SENSOR)
+        )
 
     else:
         config = entry.data.copy()
@@ -188,7 +190,7 @@ class NarodmonDataUpdateCoordinator(DataUpdateCoordinator):
         scan_interval: timedelta,
         latitude: float,
         longitude: float,
-        types: List[str],
+        types: list[str],
     ) -> None:
         """Initialize."""
         super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=scan_interval)
@@ -223,7 +225,7 @@ class NarodmonDataUpdateCoordinator(DataUpdateCoordinator):
                 if tps:
 
                     async def async_nearby_listener(
-                        new_sensors: Dict[int, int]
+                        new_sensors: dict[int, int]
                     ) -> None:  # pragma: no cover
                         self.devices = self.devices.union(new_sensors.values())
                         self.sensors = self.sensors.union(new_sensors.keys())

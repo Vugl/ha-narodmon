@@ -1,4 +1,4 @@
-#  Copyright (c) 2021-2022, Andrey "Limych" Khrolenok <andrey@khrolenok.ru>
+#  Copyright (c) 2021-2024, Andrey "Limych" Khrolenok <andrey@khrolenok.ru>
 #  Creative Commons BY-NC-SA 4.0 International Public License
 #  (see LICENSE.md or https://creativecommons.org/licenses/by-nc-sa/4.0/)
 """The NarodMon Cloud Integration Component.
@@ -6,14 +6,13 @@
 For more details about this sensor, please refer to the documentation at
 https://github.com/Limych/ha-narodmon/
 """
-import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from http import HTTPStatus
 import logging
 import socket
 import time
-from typing import Any, Dict, Final, Generic, List, Optional, Set, TypeVar, Union
+from typing import Any, Final, Generic, TypeVar
 
 import aiohttp
 import async_timeout
@@ -47,16 +46,16 @@ DATA_VERSION: Final = 1
 
 DATA_LAST_INIT_TS: Final = "last_init"
 
-NARODMON_IDS: Final = Set[int]
-NARODMON_NEARBY_LISTENER: Final = Callable[[Dict[int, int]], Awaitable[None]]
-NARODMON_SENSORS_LIST: Final = List[Dict[str, Any]]
-NARODMON_SENSORS_DICT: Final = Dict[int, Dict[str, Any]]
+NARODMON_IDS: Final = set[int]
+NARODMON_NEARBY_LISTENER: Final = Callable[[dict[int, int]], Awaitable[None]]
+NARODMON_SENSORS_LIST: Final = list[dict[str, Any]]
+NARODMON_SENSORS_DICT: Final = dict[int, dict[str, Any]]
 
 
 class ApiError(Exception):
     """Raised when Narodmon API request ended in error."""
 
-    def __init__(self, status: str, errno: Optional[int] = None):
+    def __init__(self, status: str, errno: int | None = None):
         """Initialize."""
         super().__init__(status)
         self.errno = errno
@@ -80,11 +79,11 @@ class NarodmonApiClient(Generic[T]):
         self._apikey = apikey or self._khash
         self._session = async_get_clientsession(hass, verify_ssl=verify_ssl)
         self._timeout = timeout
-        self._devices: Dict[int, float] = {}
+        self._devices: dict[int, float] = {}
         self._sensors_last_updated = False
-        self._nearby_listener: Optional[NARODMON_NEARBY_LISTENER] = None
-        self._nearby_latitude: Optional[float] = None
-        self._nearby_longitude: Optional[float] = None
+        self._nearby_listener: NARODMON_NEARBY_LISTENER | None = None
+        self._nearby_latitude: float | None = None
+        self._nearby_longitude: float | None = None
         self._nearby_sensor_types: NARODMON_IDS = set()
         self._limit: int = 1
 
@@ -129,7 +128,7 @@ class NarodmonApiClient(Generic[T]):
     def _khash(self) -> str:
         """Calculate khash."""
 
-        def data_hash(data: str, hash_len: int) -> List[int]:
+        def data_hash(data: str, hash_len: int) -> list[int]:
             """Calculate hash of given data."""
             i = 0
             khash = [0] * hash_len
@@ -147,7 +146,7 @@ class NarodmonApiClient(Generic[T]):
         return khash
 
     @staticmethod
-    def _convert2dict(device: Dict[str, Any]) -> NARODMON_SENSORS_DICT:
+    def _convert2dict(device: dict[str, Any]) -> NARODMON_SENSORS_DICT:
         """Convert device sensors list to dict and set device ID for each sensor."""
         result = {}
         dev = device.copy()
@@ -179,7 +178,7 @@ class NarodmonApiClient(Generic[T]):
     async def async_init(self) -> None:
         """Initialize API."""
         store = storage.Store(self.hass, DATA_VERSION, DOMAIN, True)
-        data: Dict[str, Any] = await store.async_load() or {
+        data: dict[str, Any] = await store.async_load() or {
             DATA_LAST_INIT_TS: 0,
         }
 
@@ -218,7 +217,7 @@ class NarodmonApiClient(Generic[T]):
             self._limit = len(devices)
             _LOGGER.debug("PubsLimit set to %d", self._limit)
 
-        sensors: Dict[int, int] = {}
+        sensors: dict[int, int] = {}
         for device in sorted(data["devices"], key=lambda x: x["distance"]):
             for sensor in device["sensors"]:
                 if sensor["type"] in self._nearby_sensor_types:
@@ -255,8 +254,8 @@ class NarodmonApiClient(Generic[T]):
             self.sensors.update(self._convert2dict(device))
 
     async def _async_api_wrapper(
-        self, data: Dict[str, Union[str, int, float]]
-    ) -> Dict[str, Any]:
+        self, data: dict[str, str | int | float]
+    ) -> dict[str, Any]:
         """Get information from the API."""
 
         data["uuid"] = await instance_id.async_get(self.hass)
@@ -287,7 +286,7 @@ class NarodmonApiClient(Generic[T]):
             _LOGGER.error("[%s] %s", exception.errno, exception.status)
             raise exception
 
-        except asyncio.TimeoutError as exception:
+        except TimeoutError as exception:
             _LOGGER.error(
                 "Timeout error fetching information from %s - %s",
                 ENDPOINT_URL,
