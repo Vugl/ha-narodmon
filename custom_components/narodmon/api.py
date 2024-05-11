@@ -24,6 +24,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import Throttle
 
 from .const import (
+    DEFAULT_SEARCH_AREA_RADIUS,
     DEFAULT_TIMEOUT,
     DEFAULT_VERIFY_SSL,
     DOMAIN,
@@ -84,6 +85,7 @@ class NarodmonApiClient(Generic[T]):
         self._nearby_listener: NARODMON_NEARBY_LISTENER | None = None
         self._nearby_latitude: float | None = None
         self._nearby_longitude: float | None = None
+        self._nearby_max_distance: float = DEFAULT_SEARCH_AREA_RADIUS
         self._nearby_sensor_types: NARODMON_IDS = set()
         self._limit: int = 1
 
@@ -109,6 +111,7 @@ class NarodmonApiClient(Generic[T]):
         target: NARODMON_NEARBY_LISTENER,
         latitude: float,
         longitude: float,
+        max_distance: float,
         sensor_types: NARODMON_IDS,
     ) -> None:
         """Set listener for nearby sensors async search request."""
@@ -120,6 +123,7 @@ class NarodmonApiClient(Generic[T]):
         )
         self._nearby_latitude = latitude
         self._nearby_longitude = longitude
+        self._nearby_max_distance = max_distance
         self._nearby_sensor_types = sensor_types
 
         self._nearby_listener = target
@@ -207,6 +211,7 @@ class NarodmonApiClient(Generic[T]):
                 "cmd": "sensorsNearby",
                 "lat": self._nearby_latitude,
                 "lon": self._nearby_longitude,
+                "radius": self._nearby_max_distance,
                 "types": ",".join([str(i) for i in self._nearby_sensor_types]),
             }
         )
@@ -219,6 +224,8 @@ class NarodmonApiClient(Generic[T]):
 
         sensors: dict[int, int] = {}
         for device in sorted(data["devices"], key=lambda x: x["distance"]):
+            if device["distance"] > self._nearby_max_distance:
+                break
             for sensor in device["sensors"]:
                 if sensor["type"] in self._nearby_sensor_types:
                     self._nearby_sensor_types.remove(sensor["type"])

@@ -24,6 +24,7 @@ _Component to integrate with Narodmon cloud and automatic search for the nearest
 ## Breaking changes
 
 - Since version 2.0.0 the field `apikey` is no longer required and is not recommended. Fill it out only if you already have your own API key with special limits. Otherwise, remove this field from your configuration.
+- Since version 2.1.0, the ability to specify the radius of the sensors search zone has been added. The default radius is set to 10 km.
 
 ## Installation
 
@@ -110,6 +111,10 @@ Each virtual device in a list have the following settings:
 **longitude**:\
   _(float) (Optional) (Default value: Your home zone longitude defined in your configuration)_\
   Longitude of the center point of the sensor search area. The sensor closest to this point is always selected.
+
+**search_area_radius**:\
+  _(float) (Optional) (Default value: 10 km)_\
+  Maximum allowed distance from described location to sensor location.
 
 **scan_interval**:\
   _(number) (Optional) (Default value: 3 minutes)_\

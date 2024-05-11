@@ -38,7 +38,9 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .api import NARODMON_IDS, NarodmonApiClient
 from .const import (
     CONF_APIKEY,
+    CONF_SEARCH_AREA_RADIUS,
     DEFAULT_SCAN_INTERVAL,
+    DEFAULT_SEARCH_AREA_RADIUS,
     DEFAULT_TIMEOUT,
     DEFAULT_VERIFY_SSL,
     DOMAIN,
@@ -66,6 +68,9 @@ DEVICE_SCHEMA = vol.Schema(
         vol.Optional(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): vol.All(
             cv.time_period, lambda value: timedelta(seconds=value.total_seconds())
         ),
+        vol.Optional(
+            CONF_SEARCH_AREA_RADIUS, default=DEFAULT_SEARCH_AREA_RADIUS
+        ): cv.positive_float,
     }
 )
 
@@ -136,11 +141,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         for index, device_config in enumerate(config.get(CONF_DEVICES)):
             latitude = device_config.get(CONF_LATITUDE, hass.config.latitude)
             longitude = device_config.get(CONF_LONGITUDE, hass.config.longitude)
+            max_distance = device_config.get(CONF_SEARCH_AREA_RADIUS)
             types = device_config.get(CONF_SENSORS, SENSOR_TYPES.keys())
             scan_interval = device_config.get(CONF_SCAN_INTERVAL)
 
             coordinator = NarodmonDataUpdateCoordinator(
-                hass, client, scan_interval, latitude, longitude, types
+                hass, client, scan_interval, latitude, longitude, max_distance, types
             )
             await coordinator.async_refresh()
 
@@ -190,6 +196,7 @@ class NarodmonDataUpdateCoordinator(DataUpdateCoordinator):
         scan_interval: timedelta,
         latitude: float,
         longitude: float,
+        max_distance: float,
         types: list[str],
     ) -> None:
         """Initialize."""
@@ -198,6 +205,7 @@ class NarodmonDataUpdateCoordinator(DataUpdateCoordinator):
         self.api = client
         self.latitude = latitude
         self.longitude = longitude
+        self.max_distance = max_distance
         self.types = types
         self.devices: NARODMON_IDS = set()
         self.sensors: NARODMON_IDS = set()
@@ -231,7 +239,11 @@ class NarodmonDataUpdateCoordinator(DataUpdateCoordinator):
                         self.sensors = self.sensors.union(new_sensors.keys())
 
                     await self.api.async_set_nearby_listener(
-                        async_nearby_listener, self.latitude, self.longitude, tps
+                        async_nearby_listener,
+                        self.latitude,
+                        self.longitude,
+                        self.max_distance,
+                        tps,
                     )
 
                 if not self._first_run or self.api.devices:
