@@ -112,6 +112,11 @@ Each virtual device in a list have the following settings:
   _(float) (Optional) (Default value: Your home zone longitude defined in your configuration)_\
   Longitude of the center point of the sensor search area. The sensor closest to this point is always selected.
 
+**show_on_map:**\
+  _(boolean) (Optional)_\
+  Enables showing the location of the weather station on the map.\
+  _Default value: false_
+
 **search_area_radius**:\
   _(float) (Optional) (Default value: 10 km)_\
   Maximum allowed distance from described location to sensor location.
