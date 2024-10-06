@@ -9,6 +9,9 @@
     "documentation": "https://github.com/Limych/ha-narodmon",
     "iot_class": "cloud_polling",
     "issue_tracker": "https://github.com/Limych/ha-narodmon/issues",
-    "requirements": [],
+    "requirements": [
+        "pip>=21.3.1",
+        "aiofiles"
+    ],
     "version": "2.1.1-alpha"
 }

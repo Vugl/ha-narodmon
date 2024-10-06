@@ -18,8 +18,11 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from homeassistant.config_entries import SOURCE_IMPORT
+from homeassistant.const import CONF_DEVICES, CONF_NAME, CONF_SENSORS
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.narodmon import NarodmonApiClient
+from custom_components.narodmon import DOMAIN, NarodmonApiClient
 
 pytest_plugins = "pytest_homeassistant_custom_component"  # pylint: disable=invalid-name
 
@@ -27,38 +30,75 @@ pytest_plugins = "pytest_homeassistant_custom_component"  # pylint: disable=inva
 # This fixture enables loading custom integrations in all tests.
 # Remove to enable selective use of this fixture
 @pytest.fixture(autouse=True)
-def auto_enable_custom_integrations(enable_custom_integrations):
+def _auto_enable_custom_integrations(enable_custom_integrations) -> None:
     """Automatically enable loading custom integrations in all tests."""
-    yield
+    return
 
 
-# This fixture is used to prevent HomeAssistant from attempting to create and dismiss persistent
-# notifications. These calls would fail without this fixture since the persistent_notification
-# integration is never loaded during a test.
+# This fixture is used to prevent HomeAssistant from attempting to create and dismiss
+# persistent notifications. These calls would fail without this fixture since the
+# persistent_notification integration is never loaded during a test.
 @pytest.fixture(name="skip_notifications", autouse=True)
-def skip_notifications_fixture():
+def _skip_notifications_fixture() -> None:
     """Skip notification calls."""
-    with patch("homeassistant.components.persistent_notification.async_create"), patch(
-        "homeassistant.components.persistent_notification.async_dismiss"
+    with (
+        patch("homeassistant.components.persistent_notification.async_create"),
+        patch("homeassistant.components.persistent_notification.async_dismiss"),
     ):
         yield
 
 
-# This fixture, when used, will result in calls to async_get_data to return None. To have the call
-# return a value, we would add the `return_value=<VALUE_TO_RETURN>` parameter to the patch call.
+# This fixture, when used, will result in calls to async_get_data to return None.
+# To have the call return a value, we would add the `return_value=<VALUE_TO_RETURN>`
+# parameter to the patch call.
 @pytest.fixture(name="bypass_get_data")
-def bypass_get_data_fixture():
+def _bypass_get_data_fixture() -> None:
     """Skip calls to get data from API."""
-    with patch.object(NarodmonApiClient, "_async_api_wrapper"), patch.object(
-        NarodmonApiClient, "async_update_data", new_callable=AsyncMock, return_value={}
+    with (
+        patch.object(
+            NarodmonApiClient,
+            "_async_api_wrapper",
+            new_callable=AsyncMock,
+            return_value={},
+        ),
+        patch.object(
+            NarodmonApiClient,
+            "async_update_data",
+            new_callable=AsyncMock,
+            return_value={},
+        ),
     ):
         yield
 
 
-# In this fixture, we are forcing calls to async_get_data to raise an Exception. This is useful
-# for exception handling.
+# In this fixture, we are forcing calls to async_get_data to raise an Exception. This
+# is useful for exception handling.
 @pytest.fixture(name="error_on_get_data")
-def error_get_data_fixture():
+def _error_get_data_fixture() -> None:
     """Simulate error when retrieving data from API."""
     with patch.object(NarodmonApiClient, "_async_api_wrapper", side_effect=Exception):
         yield
+
+
+@pytest.fixture(name="yaml_config")
+def yaml_config_fixture():
+    """Create a mock YAML config."""
+    return {
+        DOMAIN: {
+            CONF_DEVICES: [
+                {
+                    CONF_NAME: "Test",
+                    CONF_SENSORS: [
+                        "humidity",
+                        "pressure",
+                    ],
+                }
+            ],
+        },
+    }
+
+
+@pytest.fixture(name="config_entry")
+def config_entry_fixture():
+    """Create a mock config entry."""
+    return MockConfigEntry(domain=DOMAIN, entry_id="test", source=SOURCE_IMPORT)

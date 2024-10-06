@@ -1,9 +1,12 @@
 """Tests for Narodmon Cloud Integration component."""
+
 import logging
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.setup import async_setup_component
 from voluptuous import Invalid
 
 from custom_components.narodmon import (
@@ -17,12 +20,6 @@ from custom_components.narodmon import (
     cv_apikey,
 )
 from custom_components.narodmon.api import NarodmonApiClient
-from homeassistant import config_entries
-from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.setup import async_setup_component
-
-from .const import MOCK_YAML_CONFIG
 
 
 async def test_cv_apikey():
@@ -49,37 +46,46 @@ async def test_cv_apikey():
             cv_apikey(apikey)
 
 
-async def test_setup(hass: HomeAssistant, caplog):
+async def test_setup(hass: HomeAssistant, yaml_config, caplog):
     """Test setup from configuration.yaml."""
-    with patch.object(
-        NarodmonApiClient,
-        "async_init",
-        new_callable=AsyncMock,
-    ), patch.object(
-        NarodmonApiClient, "async_update_data", new_callable=AsyncMock, return_value={}
-    ), caplog.at_level(
-        logging.WARNING
+    with (
+        patch.object(
+            NarodmonApiClient,
+            "async_init",
+            new_callable=AsyncMock,
+        ),
+        patch.object(
+            NarodmonApiClient,
+            "async_update_data",
+            new_callable=AsyncMock,
+            return_value={},
+        ),
+        caplog.at_level(logging.WARNING),
     ):
-        assert await async_setup_component(hass, DOMAIN, MOCK_YAML_CONFIG)
+        assert await async_setup_component(hass, DOMAIN, yaml_config)
         await hass.async_block_till_done()
         assert len(hass.states.async_all()) == 2
         assert len(caplog.records) == 1
 
 
-async def test_setup_apikey(hass: HomeAssistant, caplog):
+async def test_setup_apikey(hass: HomeAssistant, yaml_config, caplog):
     """Test setup from configuration.yaml."""
-    with patch.object(
-        NarodmonApiClient,
-        "async_init",
-        new_callable=AsyncMock,
-    ), patch.object(
-        NarodmonApiClient, "async_update_data", new_callable=AsyncMock, return_value={}
-    ), caplog.at_level(
-        logging.WARNING
+    with (
+        patch.object(
+            NarodmonApiClient,
+            "async_init",
+            new_callable=AsyncMock,
+        ),
+        patch.object(
+            NarodmonApiClient,
+            "async_update_data",
+            new_callable=AsyncMock,
+            return_value={},
+        ),
+        caplog.at_level(logging.WARNING),
     ):
-        cfg = MOCK_YAML_CONFIG
-        cfg[DOMAIN][CONF_APIKEY] = "testapikey"
-        assert await async_setup_component(hass, DOMAIN, MOCK_YAML_CONFIG)
+        yaml_config[DOMAIN][CONF_APIKEY] = "testapikey"
+        assert await async_setup_component(hass, DOMAIN, yaml_config)
         await hass.async_block_till_done()
         assert len(hass.states.async_all()) == 2
         assert len(caplog.records) == 2
@@ -90,52 +96,55 @@ async def test_setup_apikey(hass: HomeAssistant, caplog):
 # Home Assistant using the pytest_homeassistant_custom_component plugin.
 # Assertions allow you to verify that the return value of whatever is on the left
 # side of the assertion matches with the right side.
-async def test_setup_unload_and_reload_entry(hass: HomeAssistant, bypass_get_data):
+async def test_setup_unload_and_reload_entry(
+    hass: HomeAssistant, yaml_config, config_entry, bypass_get_data
+):
     """Test entry setup and unload."""
-    # Create a mock entry so we don't have to go through config flow
-    config_entry = MockConfigEntry(
-        domain=DOMAIN, entry_id="test", source=config_entries.SOURCE_IMPORT
-    )
-    #
+    config_entry.add_to_hass(hass)
     hass.data.setdefault(YAML_DOMAIN, {})
-    hass.data[YAML_DOMAIN] = MOCK_YAML_CONFIG[DOMAIN]
+    hass.data[YAML_DOMAIN] = yaml_config[DOMAIN]
 
     # Set up the entry and assert that the values set during setup are where we expect
-    # them to be. Because we have patched the BlueprintDataUpdateCoordinator.async_get_data
-    # call, no code from custom_components/integration_blueprint/api.py actually runs.
-    assert await async_setup_entry(hass, config_entry)
-    assert (
-        DOMAIN in hass.data
-        and config_entry.entry_id in hass.data[DOMAIN]
-        and isinstance(hass.data[DOMAIN][config_entry.entry_id], dict)
-    )
-    for item in hass.data[DOMAIN][config_entry.entry_id].values():
-        assert isinstance(item, NarodmonDataUpdateCoordinator)
+    # them to be. Because we have patched the
+    # NarodmonDataUpdateCoordinator.async_get_data call, no code from
+    # custom_components/narodmon/api.py actually runs.
+    with patch.object(
+        hass.config_entries, "async_forward_entry_setups"
+    ) as forward_mock:
+        assert await async_setup_entry(hass, config_entry)
+        await hass.async_block_till_done()
+        assert forward_mock.call_count == 1
+        assert DOMAIN in hass.data
+        assert config_entry.entry_id in hass.data[DOMAIN]
+        assert isinstance(hass.data[DOMAIN][config_entry.entry_id], dict)
+        for item in hass.data[DOMAIN][config_entry.entry_id].values():
+            assert isinstance(item, NarodmonDataUpdateCoordinator)
 
     # Reload the entry and assert that the data from above is still there
-    assert await async_reload_entry(hass, config_entry) is None
-    assert (
-        DOMAIN in hass.data
-        and config_entry.entry_id in hass.data[DOMAIN]
-        and isinstance(hass.data[DOMAIN][config_entry.entry_id], dict)
-    )
-    for item in hass.data[DOMAIN][config_entry.entry_id].values():
-        assert isinstance(item, NarodmonDataUpdateCoordinator)
+    with patch.object(
+        hass.config_entries, "async_forward_entry_setups"
+    ) as forward_mock:
+        assert await async_reload_entry(hass, config_entry) is None
+        await hass.async_block_till_done()
+        assert forward_mock.call_count == 1
+        assert DOMAIN in hass.data
+        assert config_entry.entry_id in hass.data[DOMAIN]
+        assert isinstance(hass.data[DOMAIN][config_entry.entry_id], dict)
+        for item in hass.data[DOMAIN][config_entry.entry_id].values():
+            assert isinstance(item, NarodmonDataUpdateCoordinator)
 
     # Unload the entry and verify that the data has been removed
     assert await async_unload_entry(hass, config_entry)
     assert config_entry.entry_id not in hass.data[DOMAIN]
 
 
-async def test_setup_entry_exception(hass: HomeAssistant, error_on_get_data):
+async def test_setup_entry_exception(
+    hass: HomeAssistant, yaml_config, config_entry, error_on_get_data
+):
     """Test ConfigEntryNotReady when API raises an exception during entry setup."""
-    # Create a mock entry so we don't have to go through config flow
-    config_entry = MockConfigEntry(
-        domain=DOMAIN, entry_id="test", source=config_entries.SOURCE_IMPORT
-    )
-    #
+    config_entry.add_to_hass(hass)
     hass.data.setdefault(YAML_DOMAIN, {})
-    hass.data[YAML_DOMAIN] = MOCK_YAML_CONFIG[DOMAIN]
+    hass.data[YAML_DOMAIN] = yaml_config[DOMAIN]
 
     # In this case we are testing the condition where async_setup_entry raises
     # ConfigEntryNotReady using the `error_on_get_data` fixture which simulates

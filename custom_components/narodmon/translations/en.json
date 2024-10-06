@@ -14,5 +14,18 @@
         "abort": {
             "single_instance_allowed": "Only a single instance is allowed."
         }
+    },
+    "options": {
+        "abort": {
+            "no_options_available": "Configuration created via configuration.yaml cannot be changed via UI."
+        },
+        "step": {
+            "user": {
+                "data": {
+                    "show_on_map": "Show entities on map"
+                },
+                "title": "Narodmon Options"
+            }
+        }
     }
 }

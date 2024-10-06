@@ -1,26 +1,26 @@
 """Tests for Narodmon API."""
 
 import asyncio
-import os
 import time
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import aiohttp
-from pytest import raises
-from pytest_homeassistant_custom_component.common import load_fixture
+import pytest
 import yaml
+from homeassistant.core import HomeAssistant
+from pytest_homeassistant_custom_component.common import load_fixture
 
 from custom_components.narodmon.api import (
     DATA_LAST_INIT_TS,
     ENDPOINT_URL,
     NARODMON_IDS,
-    ApiError,
     NarodmonApiClient,
+    NarodmonApiError,
 )
 from custom_components.narodmon.const import DEFAULT_TIMEOUT, DEFAULT_VERIFY_SSL
-from homeassistant.core import HomeAssistant
 
-ROOT = os.path.dirname(os.path.abspath(f"{__file__}/.."))
+ROOT = Path(f"{__file__}/..").resolve().parent
 
 TEST_DEVICE1_RESULT = {
     "id": 123,
@@ -55,28 +55,25 @@ TEST_DEVICE2_RESULT = {
 }
 
 
-# pylint: disable=protected-access
-async def test_khash(hass: HomeAssistant):
-    """Test calculation khash."""
+@pytest.fixture(name="khash")
+def khash_fixture() -> str:
+    """Return API key."""
+    with Path(f"{ROOT}/secrets.yaml").open(encoding="utf8") as fp:
+        return yaml.safe_load(fp).get("api_key")
 
+
+# pylint: disable=protected-access
+async def test_khash(hass: HomeAssistant, khash):
+    """Test calculation khash."""
     # To test the api submodule, we first create an instance of our API client
     api = NarodmonApiClient(hass, DEFAULT_VERIFY_SSL, DEFAULT_TIMEOUT)
 
-    secrets_file = f"{ROOT}/secrets.yaml"
-    try:
-        with open(secrets_file, encoding="utf8") as fp:
-            key = yaml.safe_load(fp).get("api_key")
-
-        assert key == api._khash
-
-    except (FileNotFoundError, KeyError):
-        pass
+    assert khash == api._khash
 
 
 # pylint: disable=protected-access
 async def test_devices(hass: HomeAssistant):
     """Test devices property."""
-
     # To test the api submodule, we first create an instance of our API client
     api = NarodmonApiClient(hass, DEFAULT_VERIFY_SSL, DEFAULT_TIMEOUT)
 
@@ -103,11 +100,10 @@ async def test_devices(hass: HomeAssistant):
 # pylint: disable=protected-access
 async def test_async_set_nearby_listener(hass: HomeAssistant):
     """Test setting nearby listener."""
-
     # To test the api submodule, we first create an instance of our API client
     api = NarodmonApiClient(hass, DEFAULT_VERIFY_SSL, DEFAULT_TIMEOUT)
 
-    def mock_listener(data: NARODMON_IDS):
+    def mock_listener(data: NARODMON_IDS) -> None:
         """Mock listener."""
 
     await api.async_set_nearby_listener(
@@ -124,7 +120,6 @@ async def test_async_set_nearby_listener(hass: HomeAssistant):
 
 async def test_convert2dict(hass: HomeAssistant):
     """Test converting data."""
-
     # To test the api submodule, we first create an instance of our API client
     api = NarodmonApiClient(hass, DEFAULT_VERIFY_SSL, DEFAULT_TIMEOUT)
 
@@ -155,7 +150,6 @@ async def test_convert2dict(hass: HomeAssistant):
 # pylint: disable=unexpected-keyword-arg
 async def test_async_update_data(hass: HomeAssistant):
     """Test data updater."""
-
     # To test the api submodule, we first create an instance of our API client
     api = NarodmonApiClient(hass, DEFAULT_VERIFY_SSL, DEFAULT_TIMEOUT)
 
@@ -345,75 +339,39 @@ async def test_async_get_sensors_on_device(hass: HomeAssistant):
 # useful during exception handling testing since often the only action as part of
 # exception handling is a logging statement
 # pylint: disable=protected-access
-async def test_async_api_wrapper(hass: HomeAssistant, aioclient_mock, caplog):
+async def test_async_api_wrapper(hass: HomeAssistant, aioclient_mock):
     """Test getting nearby sensors."""
-
     # To test the api submodule, we first create an instance of our API client
     api = NarodmonApiClient(hass, DEFAULT_VERIFY_SSL, DEFAULT_TIMEOUT)
 
-    caplog.clear()
     aioclient_mock.clear_requests()
     #
     aioclient_mock.post(ENDPOINT_URL, status=404)
-    with raises(ApiError):
+    with pytest.raises(NarodmonApiError) as exception:
         await api._async_api_wrapper({})
-    assert (
-        len(caplog.record_tuples) == 3
-        and "[None] Invalid response from Narodmon API: 404"
-        in caplog.record_tuples[2][2]
-    )
+    assert exception.value.status == "Invalid response from Narodmon API: 404"
 
-    caplog.clear()
     aioclient_mock.clear_requests()
     #
     aioclient_mock.post(ENDPOINT_URL, text=load_fixture("error.json"))
-    with raises(ApiError):
+    with pytest.raises(NarodmonApiError) as exception:
         await api._async_api_wrapper({})
-    assert (
-        len(caplog.record_tuples) == 3
-        and "[400] Отсутствует ключ приложения: api_key" in caplog.record_tuples[2][2]
-    )
+    assert exception.value.status == "Отсутствует ключ приложения: api_key"
 
-    caplog.clear()
     aioclient_mock.clear_requests()
     #
     aioclient_mock.post(ENDPOINT_URL, exc=asyncio.TimeoutError)
-    with raises(asyncio.TimeoutError):
+    with pytest.raises(asyncio.TimeoutError):
         await api._async_api_wrapper({})
-    assert (
-        len(caplog.record_tuples) == 2
-        and "Timeout error fetching information from" in caplog.record_tuples[1][2]
-    )
 
-    caplog.clear()
     aioclient_mock.clear_requests()
     #
     aioclient_mock.post(ENDPOINT_URL, exc=TypeError)
-    with raises(TypeError):
+    with pytest.raises(TypeError):
         await api._async_api_wrapper({})
-    assert (
-        len(caplog.record_tuples) == 2
-        and "Error parsing information from" in caplog.record_tuples[1][2]
-    )
 
-    caplog.clear()
     aioclient_mock.clear_requests()
     #
     aioclient_mock.post(ENDPOINT_URL, exc=aiohttp.ClientError)
-    with raises(aiohttp.ClientError):
+    with pytest.raises(aiohttp.ClientError):
         await api._async_api_wrapper({})
-    assert (
-        len(caplog.record_tuples) == 2
-        and "Error fetching information from" in caplog.record_tuples[1][2]
-    )
-
-    caplog.clear()
-    aioclient_mock.clear_requests()
-    #
-    aioclient_mock.post(ENDPOINT_URL, exc=Exception)
-    with raises(Exception):
-        await api._async_api_wrapper({})
-    assert (
-        len(caplog.record_tuples) == 2
-        and "Something really wrong happened!" in caplog.record_tuples[1][2]
-    )

@@ -11,8 +11,9 @@ logger:
   logs:
     custom_components.narodmon: debug
 
-# If you need to debug uncomment the line below (doc: https://www.home-assistant.io/integrations/debugpy/)
-# debugpy:
+# https://www.home-assistant.io/integrations/debugpy/
+# If you need to debug uncomment the line below
+#debugpy:
 
 narodmon:
   devices:

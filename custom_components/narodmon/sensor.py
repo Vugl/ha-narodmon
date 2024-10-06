@@ -1,7 +1,8 @@
 #  Copyright (c) 2021-2024, Andrey "Limych" Khrolenok <andrey@khrolenok.ru>
 #  Creative Commons BY-NC-SA 4.0 International Public License
 #  (see LICENSE.md or https://creativecommons.org/licenses/by-nc-sa/4.0/)
-"""The NarodMon Cloud Integration Component.
+"""
+The NarodMon Cloud Integration Component.
 
 For more details about this sensor, please refer to the documentation at
 https://github.com/Limych/ha-narodmon/
@@ -28,13 +29,16 @@ from homeassistant.const import (
     CONF_SENSORS,
 )
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from . import YAML_DOMAIN
+from . import YAML_DOMAIN, NarodmonDataUpdateCoordinator
 from .const import (
     ATTR_DEVICE_NAME,
     ATTR_DISTANCE,
+    ATTR_LAT,
+    ATTR_LON,
     ATTR_SENSOR_ID,
     ATTR_SENSOR_NAME,
     ATTRIBUTION,
@@ -48,7 +52,9 @@ from .const import (
 _LOGGER: Final = logging.getLogger(__name__)
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_devices):
+async def async_setup_entry(
+    hass: HomeAssistant, entry: ConfigEntry, async_add_devices: AddEntitiesCallback
+) -> None:
     """Set up sensor platform."""
     if entry.source == SOURCE_IMPORT:
         config = hass.data[YAML_DOMAIN]
@@ -72,16 +78,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_d
             if sensors:
                 async_add_devices(sensors)
 
-    else:
-        coordinator = hass.data[DOMAIN][entry.entry_id]
-        # async_add_devices([NarodmonSensor(coordinator, entry)])
-
 
 # pylint: disable=too-many-instance-attributes
 class NarodmonSensor(CoordinatorEntity, SensorEntity):
     """Implementation of an NarodMon sensor."""
 
-    def __init__(self, coordinator, sensor_type: str, vdev_id: str, name: str):
+    def __init__(
+        self,
+        coordinator: NarodmonDataUpdateCoordinator,
+        sensor_type: str,
+        vdev_id: str,
+        name: str,
+    ) -> None:
         """Class initialization."""
         super().__init__(coordinator)
 
@@ -102,9 +110,10 @@ class NarodmonSensor(CoordinatorEntity, SensorEntity):
             "model": VERSION,
         }
 
-    def _update_state(self):
+    def _update_state(self) -> None:
         """Update entity state."""
         fresh = int(time.time() - FRESHNESS_TIME)
+        show_on_map = self.coordinator.show_on_map
         for sensor in self.coordinator.data:
             if sensor["type"] == self._sensor_type_id and sensor["time"] >= fresh:
                 if self._attr_native_value == sensor["value"]:
@@ -134,8 +143,14 @@ class NarodmonSensor(CoordinatorEntity, SensorEntity):
                         "location"
                     ]
                 if "lat" in device and "lon" in device:
-                    self._attr_extra_state_attributes[ATTR_LATITUDE] = device["lat"]
-                    self._attr_extra_state_attributes[ATTR_LONGITUDE] = device["lon"]
+                    if show_on_map:
+                        self._attr_extra_state_attributes[ATTR_LATITUDE] = device["lat"]
+                        self._attr_extra_state_attributes[ATTR_LONGITUDE] = device[
+                            "lon"
+                        ]
+                    else:
+                        self._attr_extra_state_attributes[ATTR_LAT] = device["lat"]
+                        self._attr_extra_state_attributes[ATTR_LON] = device["lon"]
 
                 _LOGGER.debug(
                     "Set sensor '%s' state to %s %s",

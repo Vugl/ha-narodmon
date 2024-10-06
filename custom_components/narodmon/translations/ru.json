@@ -15,5 +15,18 @@
         "abort": {
             "single_instance_allowed": "Допускается только один экземпляр."
         }
+    },
+    "options": {
+        "abort": {
+            "no_options_available": "Конфигурация, созданная через configuration.yaml, не может быть изменена через пользовательский интерфейс."
+        },
+        "step": {
+            "user": {
+                "data": {
+                    "show_on_map": "Показывать объекты на карте"
+                },
+                "title": "Настройки Narodmon"
+            }
+        }
     }
 }

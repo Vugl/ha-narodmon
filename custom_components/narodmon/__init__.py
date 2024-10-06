@@ -1,21 +1,21 @@
 #  Copyright (c) 2021-2024, Andrey "Limych" Khrolenok <andrey@khrolenok.ru>
 #  Creative Commons BY-NC-SA 4.0 International Public License
 #  (see LICENSE.md or https://creativecommons.org/licenses/by-nc-sa/4.0/)
-"""The NarodMon Cloud Integration Component.
+"""
+The NarodMon Cloud Integration Component.
 
 For more details about this sensor, please refer to the documentation at
 https://github.com/Limych/ha-narodmon/
 """
 import asyncio
-from datetime import timedelta
 import logging
-import os
 import re
 import time
+from datetime import timedelta
+from pathlib import Path
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant.components.sensor import DOMAIN as SENSOR
 from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.const import (
@@ -26,6 +26,7 @@ from homeassistant.const import (
     CONF_NAME,
     CONF_SCAN_INTERVAL,
     CONF_SENSORS,
+    CONF_SHOW_ON_MAP,
     CONF_TIMEOUT,
     CONF_VERIFY_SSL,
 )
@@ -33,6 +34,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.storage import STORAGE_DIR
+from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import NARODMON_IDS, NarodmonApiClient
@@ -56,7 +58,8 @@ def cv_apikey(value: Any) -> str:
     """Validate and coerce a NarodMon API key value."""
     if isinstance(value, str) and re.match("^[0-9a-z]+$", value, re.IGNORECASE):
         return value
-    raise vol.Invalid(f"Invalid API Key {value}")
+    msg = f"Invalid API Key {value}"
+    raise vol.Invalid(msg)
 
 
 DEVICE_SCHEMA = vol.Schema(
@@ -65,6 +68,7 @@ DEVICE_SCHEMA = vol.Schema(
         vol.Optional(CONF_SENSORS): vol.All(cv.ensure_list, [vol.In(SENSOR_TYPES)]),
         vol.Optional(CONF_LATITUDE): cv.latitude,
         vol.Optional(CONF_LONGITUDE): cv.longitude,
+        vol.Optional(CONF_SHOW_ON_MAP, default=False): cv.boolean,
         vol.Optional(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): vol.All(
             cv.time_period, lambda value: timedelta(seconds=value.total_seconds())
         ),
@@ -88,7 +92,7 @@ CONFIG_SCHEMA = vol.Schema({DOMAIN: CONFIG_SCHEMA_ROOT}, extra=vol.ALLOW_EXTRA)
 YAML_DOMAIN = f"_yaml_{DOMAIN}"
 
 
-async def async_setup(hass: HomeAssistant, config):
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up this integration using YAML."""
     if DOMAIN not in config:
         return True  # pragma: no cover
@@ -101,16 +105,16 @@ async def async_setup(hass: HomeAssistant, config):
     )
 
     # Remove legacy UUID file from the storage dir
-    # Todo: Remove this block in version 3.0;   pylint: disable=fixme
-    legacy_uuid_fpath = hass.config.path(STORAGE_DIR, DOMAIN + ".uuid")
-    if os.path.exists(legacy_uuid_fpath):  # pragma: no cover
-        await hass.async_add_executor_job(os.remove, legacy_uuid_fpath)
+    # TODO(Limych): Remove this block in version 3.0;   #noqa: TD003
+    legacy_uuid_fpath = Path(hass.config.path(STORAGE_DIR, DOMAIN + ".uuid"))
+    if legacy_uuid_fpath.exists():  # pragma: no cover
+        await hass.async_add_executor_job(legacy_uuid_fpath.unlink)
         _LOGGER.debug("Legacy UUID file removed (%s).", legacy_uuid_fpath)
 
     return True
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up this integration using UI."""
     if hass.data.get(DOMAIN) is None:
         hass.data.setdefault(DOMAIN, {})
@@ -139,15 +143,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         )
 
         for index, device_config in enumerate(config.get(CONF_DEVICES)):
-            latitude = device_config.get(CONF_LATITUDE, hass.config.latitude)
-            longitude = device_config.get(CONF_LONGITUDE, hass.config.longitude)
-            max_distance = device_config.get(CONF_SEARCH_AREA_RADIUS)
-            types = device_config.get(CONF_SENSORS, SENSOR_TYPES.keys())
-            scan_interval = device_config.get(CONF_SCAN_INTERVAL)
-
-            coordinator = NarodmonDataUpdateCoordinator(
-                hass, client, scan_interval, latitude, longitude, max_distance, types
-            )
+            coordinator = NarodmonDataUpdateCoordinator(hass, client, device_config)
             await coordinator.async_refresh()
 
             if not coordinator.last_update_success:  # pragma: no cover
@@ -156,12 +152,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
             hass.data[DOMAIN].setdefault(entry.entry_id, {})
             hass.data[DOMAIN][entry.entry_id][index] = coordinator
 
-        await hass.async_create_task(
-            hass.config_entries.async_forward_entry_setup(entry, SENSOR)
-        )
-
-    else:
-        config = entry.data.copy()
+        await hass.config_entries.async_forward_entry_setups(entry, [SENSOR])
 
     entry.add_update_listener(async_reload_entry)
     return True
@@ -193,65 +184,60 @@ class NarodmonDataUpdateCoordinator(DataUpdateCoordinator):
         self,
         hass: HomeAssistant,
         client: NarodmonApiClient,
-        scan_interval: timedelta,
-        latitude: float,
-        longitude: float,
-        max_distance: float,
-        types: list[str],
+        config: ConfigType,
     ) -> None:
         """Initialize."""
-        super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=scan_interval)
+        super().__init__(
+            hass, _LOGGER, name=DOMAIN, update_interval=config.get(CONF_SCAN_INTERVAL)
+        )
 
         self.api = client
-        self.latitude = latitude
-        self.longitude = longitude
-        self.max_distance = max_distance
-        self.types = types
+        self.latitude = config.get(CONF_LATITUDE, hass.config.latitude)
+        self.longitude = config.get(CONF_LONGITUDE, hass.config.longitude)
+        self.show_on_map = config.get(CONF_SHOW_ON_MAP, False)
+        self.max_distance = config.get(CONF_SEARCH_AREA_RADIUS)
+        self.types = config.get(CONF_SENSORS, SENSOR_TYPES.keys())
         self.devices: NARODMON_IDS = set()
         self.sensors: NARODMON_IDS = set()
 
         self._first_run = True
 
-    async def _async_update_data(self):
+    async def _async_update_data(self) -> list[int]:
         """Update data via library."""
-        try:
-            fresh = int(time.time() - FRESHNESS_TIME)
-            sensors = []
+        fresh = int(time.time() - FRESHNESS_TIME)
+        sensors = []
 
-            for _ in range(2):
-                data = await self.api.async_update_data(no_throttle=self._first_run)
+        for _ in range(2):
+            data = await self.api.async_update_data(no_throttle=self._first_run)
 
-                if data is None:
-                    raise UpdateFailed()
+            if data is None:
+                raise UpdateFailed
 
-                tps: NARODMON_IDS = {SENSOR_TYPES[i].get(ATTR_ID) for i in self.types}
-                for sensor in data.values():
-                    if sensor["id"] in self.sensors and sensor["time"] >= fresh:
-                        sensors.append(sensor)
-                        tps.remove(sensor["type"])
+            tps: NARODMON_IDS = {SENSOR_TYPES[i].get(ATTR_ID) for i in self.types}
+            for sensor in data.values():
+                if sensor["id"] in self.sensors and sensor["time"] >= fresh:
+                    sensors.append(sensor)
+                    tps.remove(sensor["type"])
 
-                if tps:
+            if tps:
 
-                    async def async_nearby_listener(
-                        new_sensors: dict[int, int]
-                    ) -> None:  # pragma: no cover
-                        self.devices = self.devices.union(new_sensors.values())
-                        self.sensors = self.sensors.union(new_sensors.keys())
+                async def async_nearby_listener(
+                    new_sensors: dict[int, int]
+                ) -> None:  # pragma: no cover
+                    self.devices = self.devices.union(new_sensors.values())
+                    self.sensors = self.sensors.union(new_sensors.keys())
 
-                    await self.api.async_set_nearby_listener(
-                        async_nearby_listener,
-                        self.latitude,
-                        self.longitude,
-                        self.max_distance,
-                        tps,
-                    )
+                await self.api.async_set_nearby_listener(
+                    async_nearby_listener,
+                    self.latitude,
+                    self.longitude,
+                    self.max_distance,
+                    tps,
+                )
 
-                if not self._first_run or self.api.devices:
-                    break  # pragma: no cover
+            if not self._first_run or self.api.devices:
+                break  # pragma: no cover
 
-            self._first_run = False
+        self._first_run = False
 
-            return sensors
-
-        except Exception as exception:  # pylint: disable=broad-except
-            raise UpdateFailed() from exception
+        return sensors

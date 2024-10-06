@@ -1,23 +1,23 @@
 #  Copyright (c) 2021-2024, Andrey "Limych" Khrolenok <andrey@khrolenok.ru>
 #  Creative Commons BY-NC-SA 4.0 International Public License
 #  (see LICENSE.md or https://creativecommons.org/licenses/by-nc-sa/4.0/)
-"""The NarodMon Cloud Integration Component.
+"""
+The NarodMon Cloud Integration Component.
 
 For more details about this sensor, please refer to the documentation at
 https://github.com/Limych/ha-narodmon/
 """
-from collections.abc import Awaitable, Callable
-from datetime import timedelta
-from http import HTTPStatus
 import logging
 import socket
 import time
+from collections.abc import Awaitable, Callable
+from datetime import timedelta
+from http import HTTPStatus
 from typing import Any, Final, Generic, TypeVar
 
 import aiohttp
 import async_timeout
-
-from homeassistant.const import __short_version__ as HASS_VERSION
+from homeassistant.const import __short_version__ as HASS_VERSION  # noqa: N812
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import instance_id, storage
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -53,10 +53,10 @@ NARODMON_SENSORS_LIST: Final = list[dict[str, Any]]
 NARODMON_SENSORS_DICT: Final = dict[int, dict[str, Any]]
 
 
-class ApiError(Exception):
+class NarodmonApiError(Exception):
     """Raised when Narodmon API request ended in error."""
 
-    def __init__(self, status: str, errno: int | None = None):
+    def __init__(self, status: str, errno: int | None = None) -> None:
         """Initialize."""
         super().__init__(status)
         self.errno = errno
@@ -69,8 +69,8 @@ class NarodmonApiClient(Generic[T]):
     def __init__(
         self,
         hass: HomeAssistant,
-        apikey: str = None,
-        verify_ssl: bool = DEFAULT_VERIFY_SSL,
+        apikey: str | None = None,
+        verify_ssl: bool = DEFAULT_VERIFY_SSL,  # noqa: FBT001
         timeout: int = DEFAULT_TIMEOUT,
     ) -> None:
         """Initialize coordinator."""
@@ -101,12 +101,11 @@ class NarodmonApiClient(Generic[T]):
 
     @property
     def _devices4update(self) -> NARODMON_IDS:
-        result = set(
+        return set(
             sorted(self._devices.keys(), key=lambda x: self._devices[x])[: self._limit]
         )
-        return result
 
-    async def async_set_nearby_listener(
+    async def async_set_nearby_listener(  # noqa: PLR0913
         self,
         target: NARODMON_NEARBY_LISTENER,
         latitude: float,
@@ -143,11 +142,10 @@ class NarodmonApiClient(Generic[T]):
 
             return khash
 
-        khash = "".join(
-            chr(a ^ ord(b)) for a, b in zip(data_hash(ISSUE_URL, len(KHASH)), KHASH)
+        return "".join(
+            chr(a ^ ord(b))
+            for a, b in zip(data_hash(ISSUE_URL, len(KHASH)), KHASH, strict=False)
         )
-
-        return khash
 
     @staticmethod
     def _convert2dict(device: dict[str, Any]) -> NARODMON_SENSORS_DICT:
@@ -181,7 +179,7 @@ class NarodmonApiClient(Generic[T]):
 
     async def async_init(self) -> None:
         """Initialize API."""
-        store = storage.Store(self.hass, DATA_VERSION, DOMAIN, True)
+        store = storage.Store(self.hass, DATA_VERSION, DOMAIN, private=True)
         data: dict[str, Any] = await store.async_load() or {
             DATA_LAST_INIT_TS: 0,
         }
@@ -264,7 +262,6 @@ class NarodmonApiClient(Generic[T]):
         self, data: dict[str, str | int | float]
     ) -> dict[str, Any]:
         """Get information from the API."""
-
         data["uuid"] = await instance_id.async_get(self.hass)
 
         _LOGGER.debug("Request: '%s'", data)
@@ -273,50 +270,32 @@ class NarodmonApiClient(Generic[T]):
         data["lang"] = "en"
 
         try:
-            async with async_timeout.timeout(self._timeout):
-                async with self._session.post(
-                    ENDPOINT_URL, headers=HEADERS, json=data
-                ) as resp:
-                    if resp.status != HTTPStatus.OK:
-                        raise ApiError(
-                            f"Invalid response from Narodmon API: {resp.status}"
-                        )
-                    _LOGGER.debug("Response: '%s'", await resp.text())
-                    result = await resp.json()
+            async with (
+                async_timeout.timeout(self._timeout),
+                self._session.post(ENDPOINT_URL, headers=HEADERS, json=data) as resp,
+            ):
+                if resp.status != HTTPStatus.OK:
+                    msg = f"Invalid response from Narodmon API: {resp.status}"
+                    raise NarodmonApiError(msg)
+                _LOGGER.debug("Response: '%s'", await resp.text())
+                result = await resp.json()
 
-                if "error" in result:
-                    raise ApiError(result["error"], errno=result["errno"])
-
-                return result
-
-        except ApiError as exception:
-            _LOGGER.error("[%s] %s", exception.errno, exception.status)
-            raise exception
-
-        except TimeoutError as exception:
-            _LOGGER.error(
-                "Timeout error fetching information from %s - %s",
-                ENDPOINT_URL,
-                exception,
+        except TimeoutError:
+            _LOGGER.exception(
+                "Timeout error fetching information from %s", ENDPOINT_URL
             )
-            raise exception
+            raise
 
-        except (KeyError, TypeError) as exception:
-            _LOGGER.error(
-                "Error parsing information from %s - %s",
-                ENDPOINT_URL,
-                exception,
-            )
-            raise exception
+        except (KeyError, TypeError):
+            _LOGGER.exception("Error parsing information from %s", ENDPOINT_URL)
+            raise
 
-        except (aiohttp.ClientError, socket.gaierror) as exception:
-            _LOGGER.error(
-                "Error fetching information from %s - %s",
-                ENDPOINT_URL,
-                exception,
-            )
-            raise exception
+        except (aiohttp.ClientError, socket.gaierror):
+            _LOGGER.exception("Error fetching information from %s", ENDPOINT_URL)
+            raise
 
-        except Exception as exception:  # pylint: disable=broad-except
-            _LOGGER.error("Something really wrong happened! - %s", exception)
-            raise exception
+        else:
+            if "error" in result:
+                raise NarodmonApiError(result["error"], errno=result["errno"])
+
+            return result
