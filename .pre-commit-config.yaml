@@ -51,10 +51,6 @@ repos:
           - --format=custom
           - --configfile=tests/bandit.yaml
         files: ^(custom_components|bin|tests)/.+\.py$
-  - repo: https://github.com/pre-commit/mirrors-isort
-    rev: v5.10.1
-    hooks:
-      - id: isort
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.4.0
     hooks:
@@ -80,11 +76,6 @@ repos:
         types: [python]
         require_serial: true
         files: ^custom_components/.+\.py$
-      - id: pylint
-        name: pylint
-        entry: scripts/run-in-env python3 -m pylint
-        language: system
-        types: [python]
       # Uncomment lines below to test code on every commit
       - id: pytest
         name: pytest
