@@ -14,9 +14,7 @@ from custom_components.narodmon import (
     DOMAIN,
     YAML_DOMAIN,
     NarodmonDataUpdateCoordinator,
-    async_reload_entry,
     async_setup_entry,
-    async_unload_entry,
     cv_apikey,
 )
 from custom_components.narodmon.api import NarodmonApiClient
@@ -108,33 +106,31 @@ async def test_setup_unload_and_reload_entry(
     # them to be. Because we have patched the
     # NarodmonDataUpdateCoordinator.async_get_data call, no code from
     # custom_components/narodmon/api.py actually runs.
-    with patch.object(
-        hass.config_entries, "async_forward_entry_setups"
-    ) as forward_mock:
-        assert await async_setup_entry(hass, config_entry)
-        await hass.async_block_till_done()
-        assert forward_mock.call_count == 1
-        assert DOMAIN in hass.data
-        assert config_entry.entry_id in hass.data[DOMAIN]
-        assert isinstance(hass.data[DOMAIN][config_entry.entry_id], dict)
-        for item in hass.data[DOMAIN][config_entry.entry_id].values():
-            assert isinstance(item, NarodmonDataUpdateCoordinator)
+    await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    #
+    assert DOMAIN in hass.data
+    assert config_entry.entry_id in hass.data[DOMAIN]
+    cfg = hass.data[DOMAIN][config_entry.entry_id]
+    assert isinstance(cfg, dict)
+    for item in cfg.values():
+        assert isinstance(item, NarodmonDataUpdateCoordinator)
 
     # Reload the entry and assert that the data from above is still there
-    with patch.object(
-        hass.config_entries, "async_forward_entry_setups"
-    ) as forward_mock:
-        assert await async_reload_entry(hass, config_entry) is None
-        await hass.async_block_till_done()
-        assert forward_mock.call_count == 1
-        assert DOMAIN in hass.data
-        assert config_entry.entry_id in hass.data[DOMAIN]
-        assert isinstance(hass.data[DOMAIN][config_entry.entry_id], dict)
-        for item in hass.data[DOMAIN][config_entry.entry_id].values():
-            assert isinstance(item, NarodmonDataUpdateCoordinator)
+    await hass.config_entries.async_reload(config_entry.entry_id)
+    await hass.async_block_till_done()
+    #
+    assert DOMAIN in hass.data
+    assert config_entry.entry_id in hass.data[DOMAIN]
+    cfg = hass.data[DOMAIN][config_entry.entry_id]
+    assert isinstance(cfg, dict)
+    for item in cfg.values():
+        assert isinstance(item, NarodmonDataUpdateCoordinator)
 
     # Unload the entry and verify that the data has been removed
-    assert await async_unload_entry(hass, config_entry)
+    await hass.config_entries.async_unload(config_entry.entry_id)
+    await hass.async_block_till_done()
+    #
     assert config_entry.entry_id not in hass.data[DOMAIN]
 
 
