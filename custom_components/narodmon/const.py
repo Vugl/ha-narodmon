@@ -7,6 +7,7 @@ The Narodmon Cloud Integration Component.
 For more details about this sensor, please refer to the documentation at
 https://github.com/Limych/ha-narodmon/
 """
+
 from datetime import timedelta
 from typing import Final
 

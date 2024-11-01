@@ -7,6 +7,7 @@ The NarodMon Cloud Integration Component.
 For more details about this sensor, please refer to the documentation at
 https://github.com/Limych/ha-narodmon/
 """
+
 import asyncio
 import logging
 import re
@@ -222,7 +223,7 @@ class NarodmonDataUpdateCoordinator(DataUpdateCoordinator):
             if tps:
 
                 async def async_nearby_listener(
-                    new_sensors: dict[int, int]
+                    new_sensors: dict[int, int],
                 ) -> None:  # pragma: no cover
                     self.devices = self.devices.union(new_sensors.values())
                     self.sensors = self.sensors.union(new_sensors.keys())

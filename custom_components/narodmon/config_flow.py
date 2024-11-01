@@ -7,6 +7,7 @@ The narodmon Cloud Integration Component.
 For more details about this sensor, please refer to the documentation at
 https://github.com/Limych/ha-narodmon/
 """
+
 import voluptuous as vol
 from homeassistant.config_entries import (
     CONN_CLASS_CLOUD_POLL,
@@ -107,7 +108,8 @@ class NarodmonOptionsFlowHandler(OptionsFlow):
         self.options = dict(config_entry.options)
 
     async def async_step_init(
-        self, user_input: ConfigType = None  # noqa: ARG002
+        self,
+        user_input: ConfigType = None,  # noqa: ARG002
     ) -> ConfigFlowResult:  # pylint: disable=unused-argument
         """Manage the options."""
         if self.config_entry.source == SOURCE_IMPORT:
