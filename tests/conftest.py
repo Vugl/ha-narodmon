@@ -1,5 +1,6 @@
 # pylint: disable=protected-access,redefined-outer-name
 """Global fixtures for integration."""
+
 # Fixtures allow you to replace functions with a Mock object. You can perform
 # many options via the Mock to reflect a particular behavior from the original
 # function that you want to see without going through the function's actual logic.
@@ -48,8 +49,8 @@ def _skip_notifications_fixture() -> None:
         yield
 
 
-# This fixture, when used, will result in calls to async_get_data to return None.
-# To have the call return a value, we would add the `return_value=<VALUE_TO_RETURN>`
+# This fixture, when used, will result in calls to async_get_data to return None. To
+# have the call return a value, we would add the `return_value=<VALUE_TO_RETURN>`
 # parameter to the patch call.
 @pytest.fixture(name="bypass_get_data")
 def _bypass_get_data_fixture() -> None:
