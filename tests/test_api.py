@@ -2,6 +2,7 @@
 
 import asyncio
 import time
+from http import HTTPStatus
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -264,8 +265,55 @@ async def test_async_init(hass: HomeAssistant):
         wrapper.assert_not_called()
 
 
-# pylint: disable=protected-access
-async def test_async_get_nearby_sensors(hass: HomeAssistant):
+async def test__async_reset_init(hass: HomeAssistant):
+    """Test resetting of API initialization."""
+    now_ts = int(time.time())
+
+    # To test the api submodule, we first create an instance of our API client
+    api = NarodmonApiClient(hass, DEFAULT_VERIFY_SSL, DEFAULT_TIMEOUT)
+
+    with (
+        patch(
+            "homeassistant.helpers.storage.Store.async_load",
+            new_callable=AsyncMock,
+            return_value={},
+        ) as store_loader,
+        patch(
+            "homeassistant.helpers.storage.Store.async_save", new_callable=AsyncMock
+        ) as store_saver,
+    ):
+        await api._async_reset_init()
+
+        store_loader.assert_called_once()
+        store_saver.assert_called_once_with(
+            {
+                DATA_LAST_INIT_TS: 0,
+            }
+        )
+
+    with (
+        patch(
+            "homeassistant.helpers.storage.Store.async_load",
+            new_callable=AsyncMock,
+            return_value={
+                DATA_LAST_INIT_TS: now_ts - 86400,
+            },
+        ) as store_loader,
+        patch(
+            "homeassistant.helpers.storage.Store.async_save", new_callable=AsyncMock
+        ) as store_saver,
+    ):
+        await api._async_reset_init()
+
+        store_loader.assert_called_once()
+        store_saver.assert_called_once_with(
+            {
+                DATA_LAST_INIT_TS: 0,
+            }
+        )
+
+
+async def test__async_search_nearby_sensors(hass: HomeAssistant):
     """Test getting nearby sensors."""
     # To test the api submodule, we first create an instance of our API client
     api = NarodmonApiClient(hass, DEFAULT_VERIFY_SSL, DEFAULT_TIMEOUT)
@@ -309,7 +357,7 @@ async def test_async_get_nearby_sensors(hass: HomeAssistant):
 
 
 # pylint: disable=protected-access
-async def test_async_get_sensors_on_device(hass: HomeAssistant):
+async def test__async_update_sensors(hass: HomeAssistant):
     """Test getting sensors on device."""
     # To test the api submodule, we first create an instance of our API client
     api = NarodmonApiClient(hass, DEFAULT_VERIFY_SSL, DEFAULT_TIMEOUT)
@@ -345,24 +393,52 @@ async def test_async_get_sensors_on_device(hass: HomeAssistant):
 # useful during exception handling testing since often the only action as part of
 # exception handling is a logging statement
 # pylint: disable=protected-access
-async def test_async_api_wrapper(hass: HomeAssistant, aioclient_mock):
+async def test__async_api_wrapper(hass: HomeAssistant, aioclient_mock):
     """Test getting nearby sensors."""
     # To test the api submodule, we first create an instance of our API client
     api = NarodmonApiClient(hass, DEFAULT_VERIFY_SSL, DEFAULT_TIMEOUT)
 
     aioclient_mock.clear_requests()
     #
-    aioclient_mock.post(ENDPOINT_URL, status=404)
+    aioclient_mock.post(ENDPOINT_URL, text='{"data": "test response"}')
+    with (
+        patch.object(api, "_async_reset_init", new_callable=AsyncMock) as reset_init,
+    ):
+        assert await api._async_api_wrapper({}) == {
+            "data": "test response",
+        }
+
+    aioclient_mock.clear_requests()
+    #
+    aioclient_mock.post(ENDPOINT_URL, status=HTTPStatus.NOT_FOUND)
     with pytest.raises(NarodmonApiError) as exception:
         await api._async_api_wrapper({})
+
     assert exception.value.status == "Invalid response from Narodmon API: 404"
 
     aioclient_mock.clear_requests()
     #
-    aioclient_mock.post(ENDPOINT_URL, text=load_fixture("error.json"))
-    with pytest.raises(NarodmonApiError) as exception:
+    aioclient_mock.post(ENDPOINT_URL, text=load_fixture("error_400.json"))
+    with (
+        patch.object(api, "_async_reset_init", new_callable=AsyncMock) as reset_init,
+        pytest.raises(NarodmonApiError) as exception,
+    ):
         await api._async_api_wrapper({})
+
     assert exception.value.status == "Отсутствует ключ приложения: api_key"
+    reset_init.assert_not_called()
+
+    aioclient_mock.clear_requests()
+    #
+    aioclient_mock.post(ENDPOINT_URL, text=load_fixture("error_401.json"))
+    with (
+        patch.object(api, "_async_reset_init", new_callable=AsyncMock) as reset_init,
+        pytest.raises(NarodmonApiError) as exception,
+    ):
+        await api._async_api_wrapper({})
+
+    assert exception.value.status == "Требуется авторизация"
+    reset_init.assert_called_once()
 
     aioclient_mock.clear_requests()
     #

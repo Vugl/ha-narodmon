@@ -7,6 +7,7 @@ The NarodMon Cloud Integration Component.
 For more details about this sensor, please refer to the documentation at
 https://github.com/Limych/ha-narodmon/
 """
+
 import logging
 import socket
 import time
@@ -105,7 +106,7 @@ class NarodmonApiClient(Generic[T]):
             sorted(self._devices.keys(), key=lambda x: self._devices[x])[: self._limit]
         )
 
-    async def async_set_nearby_listener(  # noqa: PLR0913
+    async def async_set_nearby_listener(
         self,
         target: NARODMON_NEARBY_LISTENER,
         latitude: float,
@@ -197,6 +198,17 @@ class NarodmonApiClient(Generic[T]):
         )
 
         data[DATA_LAST_INIT_TS] = now_ts
+
+        await store.async_save(data)
+
+    async def _async_reset_init(self) -> None:
+        """Reset of API initialization."""
+        store = storage.Store(self.hass, DATA_VERSION, DOMAIN, private=True)
+        data: dict[str, Any] = await store.async_load() or {
+            DATA_LAST_INIT_TS: 0,
+        }
+
+        data[DATA_LAST_INIT_TS] = 0
 
         await store.async_save(data)
 
@@ -296,6 +308,8 @@ class NarodmonApiClient(Generic[T]):
 
         else:
             if "error" in result:
+                if result["errno"] == HTTPStatus.UNAUTHORIZED:
+                    await self._async_reset_init()
                 raise NarodmonApiError(result["error"], errno=result["errno"])
 
             return result
