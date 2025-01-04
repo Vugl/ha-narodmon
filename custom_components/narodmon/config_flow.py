@@ -104,15 +104,15 @@ class NarodmonOptionsFlowHandler(OptionsFlow):
 
     def __init__(self, config_entry: ConfigEntry) -> None:
         """Initialize HACS options flow."""
-        self.config_entry = config_entry
-        self.options = dict(config_entry.options)
+        self._config_entry = config_entry
+        self._options = dict(config_entry.options)
 
     async def async_step_init(
         self,
         user_input: ConfigType = None,  # noqa: ARG002
     ) -> ConfigFlowResult:  # pylint: disable=unused-argument
         """Manage the options."""
-        if self.config_entry.source == SOURCE_IMPORT:
+        if self._config_entry.source == SOURCE_IMPORT:
             return self.async_abort(reason="no_options_available")
 
         return await self.async_step_user()
@@ -120,7 +120,7 @@ class NarodmonOptionsFlowHandler(OptionsFlow):
     async def async_step_user(self, user_input: ConfigType = None) -> ConfigFlowResult:
         """Handle a flow initialized by the user."""
         if user_input is not None:
-            self.options.update(user_input)
+            self._options.update(user_input)
             return await self._update_options()
 
         return self.async_show_form(
@@ -129,7 +129,7 @@ class NarodmonOptionsFlowHandler(OptionsFlow):
                 {
                     vol.Required(
                         CONF_SHOW_ON_MAP,
-                        default=self.options.get(CONF_SHOW_ON_MAP, False),
+                        default=self._options.get(CONF_SHOW_ON_MAP, False),
                     ): bool,
                 }
             ),
@@ -138,5 +138,5 @@ class NarodmonOptionsFlowHandler(OptionsFlow):
     async def _update_options(self) -> ConfigFlowResult:
         """Update config entry options."""
         return self.async_create_entry(
-            title=self.hass.config.location_name, data=self.options
+            title=self.hass.config.location_name, data=self._options
         )

@@ -1,6 +1,7 @@
 {
     "name": "Narodmon Cloud Integration",
     "hide_default_branch": true,
-    "homeassistant": "2024.6.0",
+    "homeassistant": "2024.11.0",
+    "hacs": "2.0.1",
     "render_readme": true
 }
