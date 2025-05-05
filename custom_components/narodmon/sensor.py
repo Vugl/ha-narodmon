@@ -57,7 +57,7 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_devices: AddEntitiesCallback
 ) -> None:
     """Set up sensor platform."""
-    if entry.source == SOURCE_IMPORT:
+    if entry.source == "user":
         config = hass.data[YAML_DOMAIN]
         for index, device_config in enumerate(config.get(CONF_DEVICES)):
             vdev_id = "-".join([entry.entry_id, str(index)])
