@@ -121,7 +121,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data.setdefault(DOMAIN, {})
         _LOGGER.info(STARTUP_MESSAGE)
 
-    if entry.source == SOURCE_IMPORT:
+    if entry.source == "user":
         if YAML_DOMAIN not in hass.data:  # pragma: no cover
             await hass.config_entries.async_remove(entry.entry_id)
             raise ConfigEntryNotReady
