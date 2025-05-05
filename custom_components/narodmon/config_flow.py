@@ -52,7 +52,7 @@ class NarodmonFlowHandler(ConfigFlow, domain=DOMAIN):
         self._errors = {}
 
         for entry in self._async_current_entries():
-            if entry.source == SOURCE_IMPORT:
+            if entry.source == "user":
                 return self.async_abort(reason="single_instance_allowed")
 
         if user_input is not None:
@@ -112,7 +112,7 @@ class NarodmonOptionsFlowHandler(OptionsFlow):
         user_input: ConfigType = None,  # noqa: ARG002
     ) -> ConfigFlowResult:  # pylint: disable=unused-argument
         """Manage the options."""
-        if self._config_entry.source == SOURCE_IMPORT:
+        if self._config_entry.source == "user":
             return self.async_abort(reason="no_options_available")
 
         return await self.async_step_user()
